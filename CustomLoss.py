@@ -70,6 +70,6 @@ def Loss_fn(pred, lbl, d=1.0, s=1.0, g=1.0):
     l_ssim = torch.clamp((1 - ssim(pred, lbl, val_range = 1.0)) * 0.5, 0, 1)
     l_grad = gradient_loss(pred, lbl)
 
-    loss = (d * l_depth + s * l_ssim + g * l_grad) / (d + s + g)
+    loss = (d * l_depth + s * l_ssim + g * l_grad)
 
     return loss

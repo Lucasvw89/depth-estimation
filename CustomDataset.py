@@ -7,7 +7,7 @@ from torchvision.transforms import v2
 class NyuDataset(Dataset):
     def __init__(
         self,
-        train_data=False,
+        split="train",
         inverse_depth=False,
         transforms=None,
         image_shape=(480, 640),
@@ -16,7 +16,7 @@ class NyuDataset(Dataset):
     ):
         super().__init__()
 
-        self.train_data = train_data
+        self.split = split
         self.transforms = transforms
         self.inverse_depth = inverse_depth
         self.image_shape = image_shape
@@ -28,21 +28,27 @@ class NyuDataset(Dataset):
 
         indices = np.arange(len(data["images"]))  # every index
 
-        random_generator = np.random.default_rng(seed=seed)
-        random_generator.shuffle(indices)
+        self.random_generator = np.random.default_rng(seed=seed)
+        self.random_generator.shuffle(indices)
 
-        split_idx = int(indices.shape[0] * 0.3)
+        train_portion = 0.6
+        test_portion = 0.2
+        val_portion = 1.0 - train_portion - test_portion
+        
+        train_split_idx = int(indices.shape[0] * train_portion)
+        test_split_idx = train_split_idx + int(indices.shape[0] * test_portion)
 
-        if self.train_data:
-            self.indices = indices[split_idx:]
-        else:
-            self.indices = indices[:split_idx]
+        if self.split == "train":
+            self.indices = indices[: train_split_idx]
+        elif self.split == "test":
+            self.indices = indices[train_split_idx : test_split_idx]
+        elif self.split == "train_test":
+            self.indices = indices[: test_split_idx]
+        elif split == "val":
+            self.indices = indices[test_split_idx :]
 
     def __len__(self):
-        if self.train_data:
-            return self.indices.shape[0]
-        else:
-            return self.indices.shape[0]
+        return self.indices.shape[0]
 
     def __getitem__(self, idx):
         image_np = self.images[self.indices[idx]]
@@ -59,7 +65,8 @@ class NyuDataset(Dataset):
 
         if self.transforms:
             image, depth = self.transforms((image_np, depth_np))
-            if self.train_data:
+
+            if (self.split == "train" or self.split == "train_test") and self.random_generator.random() < 0.25:
                 image = v2.RandomChannelPermutation()(image)
         
         image = v2.Resize(self.image_shape)(image)

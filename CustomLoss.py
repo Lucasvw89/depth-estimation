@@ -63,13 +63,68 @@ def gradient_loss(pred, target):
     return F.l1_loss(pred_dx, target_dx) + F.l1_loss(pred_dy, target_dy)
 
 
-def Loss_fn(pred, lbl, d=1.0, s=1.0, g=1.0):
+def laplacian_loss(pred, target):
+    b, c, h, w = pred.shape
+
+    kernel = torch.tensor([
+        [1,  4,  1],
+        [4, -20, 4],
+        [1,  4,  1]
+    ], dtype=pred.dtype, device=pred.device)
+
+    kernel = kernel.view(1, 1, 3, 3).repeat(c, 1, 1, 1)
+
+    lap_pred = F.conv2d(pred, kernel, padding=1, groups=c)
+    lap_target = F.conv2d(target, kernel, padding=1, groups=c)
+
+    return F.l1_loss(lap_pred, lap_target)
+
+
+def scharr_loss(pred, target):
+    b, c, h, w = pred.shape
+
+    scharr_x = torch.tensor([
+        [-3,  0,  3],
+        [-10, 0, 10],
+        [-3,  0,  3]
+    ], dtype=pred.dtype, device=pred.device)
+
+    scharr_y = torch.tensor([
+        [ 3, 10,  3],
+        [ 0,  0,  0],
+        [-3, -10, -3]
+    ], dtype=pred.dtype, device=pred.device)
+
+    scharr_x = scharr_x.view(1, 1, 3, 3).repeat(c, 1, 1, 1)
+    scharr_y = scharr_y.view(1, 1, 3, 3).repeat(c, 1, 1, 1)
+
+    grad_x_pred = F.conv2d(pred, scharr_x, padding=1, groups=c)
+    grad_y_pred = F.conv2d(pred, scharr_y, padding=1, groups=c)
+
+    grad_x_target = F.conv2d(target, scharr_x, padding=1, groups=c)
+    grad_y_target = F.conv2d(target, scharr_y, padding=1, groups=c)
+
+    loss_x = F.l1_loss(grad_x_pred, grad_x_target)
+    loss_y = F.l1_loss(grad_y_pred, grad_y_target)
+
+    return loss_x + loss_y
+
+
+def Loss_fn(pred, lbl, depth=1.0, struct=1.0, grad=1.0, laplacian=1.0, scharr=1.0):
     L1 = nn.L1Loss()
 
     l_depth = L1(pred, lbl)
     l_ssim = torch.clamp((1 - ssim(pred, lbl, val_range = 1.0)) * 0.5, 0, 1)
     l_grad = gradient_loss(pred, lbl)
+    l_laplacian = laplacian_loss(pred, lbl)
+    l_scharr = scharr_loss(pred, lbl)
 
-    loss = (d * l_depth + s * l_ssim + g * l_grad)
+    loss = (
+        depth * l_depth + 
+        struct * l_ssim + 
+        grad * l_grad + 
+        laplacian * l_laplacian + 
+        scharr * l_scharr
+    )
 
     return loss
